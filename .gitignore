@@ -1,0 +1,47 @@
+# Build artifacts
+target/
+*.class
+*.jar
+*.war
+
+# Node
+node_modules/
+dist/
+.vercel/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+ml-service/models/credit_risk_model.pkl
+ml-service/models/scaler.pkl
+ml-service/models/training_report.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+postgres_data/
+grafana_data/
+
+# Logs
+*.log
+logs/
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
