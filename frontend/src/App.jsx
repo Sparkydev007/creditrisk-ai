@@ -7,7 +7,10 @@ import CustomerDetail from './pages/CustomerDetail.jsx';
 import Applications from './pages/Applications.jsx';
 import ApplicationDetail from './pages/ApplicationDetail.jsx';
 import AuditLog from './pages/AuditLog.jsx';
-import Sidebar from './components/Sidebar.jsx';
+import ReviewQueue from './pages/ReviewQueue.jsx';
+import PolicyConfig from './pages/PolicyConfig.jsx';
+import SystemHealth from './pages/SystemHealth.jsx';
+import Layout from './components/Layout.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -43,20 +46,20 @@ function App() {
 
   return (
     <Router>
-      <div className="d-flex">
-        <Sidebar user={user} onLogout={handleLogout} />
-        <div className="main-content">
-          <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/customers" element={<Customers />} />
-            <Route path="/customers/:id" element={<CustomerDetail />} />
-            <Route path="/applications" element={<Applications />} />
-            <Route path="/applications/:id" element={<ApplicationDetail />} />
-            <Route path="/audit" element={<AuditLog />} />
-            <Route path="*" element={<Navigate to="/dashboard" />} />
-          </Routes>
-        </div>
-      </div>
+      <Layout user={user} onLogout={handleLogout}>
+        <Routes>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/customers" element={<Customers />} />
+          <Route path="/customers/:id" element={<CustomerDetail />} />
+          <Route path="/applications" element={<Applications />} />
+          <Route path="/applications/:id" element={<ApplicationDetail />} />
+          <Route path="/reviews" element={<ReviewQueue />} />
+          <Route path="/audit" element={<AuditLog />} />
+          <Route path="/admin/policies" element={<PolicyConfig />} />
+          <Route path="/system-health" element={<SystemHealth />} />
+          <Route path="*" element={<Navigate to="/dashboard" />} />
+        </Routes>
+      </Layout>
     </Router>
   );
 }
