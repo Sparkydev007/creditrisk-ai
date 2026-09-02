@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -42,7 +43,7 @@ jobs:
           restore-keys: ${{ runner.os }}-m2
 
       - name: Install parent POM
-        run: mvn install -N -q
+        run: mvn install -N
 
       - name: Build with Maven
         run: mvn clean compile -DskipTests
