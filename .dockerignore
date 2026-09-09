@@ -7,6 +7,7 @@ frontend/build/
 *.md
 *.yml
 *.yaml
+!services/**/src/main/resources/**/*.yml
 !services/**/Dockerfile
 .dockerignore
 .env
