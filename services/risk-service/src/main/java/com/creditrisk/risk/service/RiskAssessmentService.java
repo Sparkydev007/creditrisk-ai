@@ -7,6 +7,7 @@ import com.creditrisk.risk.entity.ApplicationData;
 import com.creditrisk.risk.entity.RiskAssessmentRecord;
 import com.creditrisk.risk.repository.ApplicationDataRepository;
 import com.creditrisk.risk.repository.RiskAssessmentRecordRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -110,14 +111,20 @@ public class RiskAssessmentService {
             applicationDataRepository.save(appData);
 
             // Publish failure event
+            String errorPayload;
+            try {
+                errorPayload = objectMapper.writeValueAsString(Map.of(
+                        "applicationId", applicationId,
+                        "error", e.getMessage() == null ? "unknown" : e.getMessage()
+                ));
+            } catch (JsonProcessingException jsonEx) {
+                errorPayload = "{\"error\":\"failed to serialize error payload\"}";
+            }
             DomainEvent event = DomainEvent.create(
                     "RiskAssessmentFailed",
                     String.valueOf(applicationId),
                     "RiskAssessment",
-                    objectMapper.writeValueAsString(Map.of(
-                            "applicationId", applicationId,
-                            "error", e.getMessage()
-                    )),
+                    errorPayload,
                     null
             );
             eventPublisher.publish(riskEventsTopic, event);

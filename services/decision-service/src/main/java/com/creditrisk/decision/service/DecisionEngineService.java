@@ -7,6 +7,7 @@ import com.creditrisk.decision.entity.DecisionPolicy;
 import com.creditrisk.decision.entity.DecisionRecord;
 import com.creditrisk.decision.repository.DecisionPolicyRepository;
 import com.creditrisk.decision.repository.DecisionRecordRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -134,16 +135,23 @@ public class DecisionEngineService {
             case MANUAL_REVIEW -> "ApplicationUnderReview";
         };
 
+        String payload;
+        try {
+            payload = objectMapper.writeValueAsString(Map.of(
+                    "applicationId", applicationId,
+                    "outcome", outcome.name(),
+                    "riskScore", riskScore,
+                    "probabilityOfDefault", probabilityOfDefault
+            ));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize decision event payload", e);
+        }
+
         DomainEvent event = DomainEvent.create(
                 eventType,
                 String.valueOf(applicationId),
                 "Decision",
-                objectMapper.writeValueAsString(Map.of(
-                        "applicationId", applicationId,
-                        "outcome", outcome.name(),
-                        "riskScore", riskScore,
-                        "probabilityOfDefault", probabilityOfDefault
-                )),
+                payload,
                 null
         );
         eventPublisher.publish(decisionEventsTopic, event);

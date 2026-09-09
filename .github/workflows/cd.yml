@@ -49,11 +49,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Lowercase image prefix
+        run: echo "IMAGE_PREFIX_LC=${IMAGE_PREFIX,,}" >> $GITHUB_ENV
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.name }}
+          images: ${{ env.IMAGE_PREFIX_LC }}/${{ matrix.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
@@ -74,6 +77,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: ${{ vars.DEPLOY_HOST != '' }}
+    env:
+      DEPLOY_FRONTEND_HOST: ${{ secrets.DEPLOY_FRONTEND_HOST }}
     steps:
       - name: Deploy to server over SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -88,10 +93,10 @@ jobs:
             docker image prune -f
 
       - name: Deploy to server over SSH (frontend/proxy)
-        if: ${{ secrets.DEPLOY_FRONTEND_HOST != '' }}
+        if: ${{ env.DEPLOY_FRONTEND_HOST != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.DEPLOY_FRONTEND_HOST }}
+          host: ${{ env.DEPLOY_FRONTEND_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |

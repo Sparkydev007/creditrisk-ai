@@ -14,6 +14,7 @@ import com.creditrisk.application.repository.DecisionRepository;
 import com.creditrisk.application.repository.RiskAssessmentRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.creditrisk.constants.ApplicationStatus;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -117,15 +118,22 @@ public class ApplicationServiceImpl {
         app = applicationRepository.save(app);
 
         // Publish event
+        String payload;
+        try {
+            payload = objectMapper.writeValueAsString(Map.of(
+                    "applicationId", app.getId(),
+                    "customerId", app.getCustomerId(),
+                    "loanAmount", app.getLoanAmount()
+            ));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize application event payload", e);
+        }
+
         DomainEvent event = DomainEvent.create(
                 "ApplicationSubmitted",
                 String.valueOf(app.getId()),
                 "CreditApplication",
-                objectMapper.writeValueAsString(Map.of(
-                        "applicationId", app.getId(),
-                        "customerId", app.getCustomerId(),
-                        "loanAmount", app.getLoanAmount()
-                )),
+                payload,
                 null
         );
         eventPublisher.publish(applicationEventsTopic, event);
