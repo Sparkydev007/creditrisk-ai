@@ -9,7 +9,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY app/ ./app/
 COPY training/ ./training/
-COPY models/ ./models/
+
+# Train the model at build time so the image is self-contained
+# (models/*.pkl are not committed to git; training generates them into /app/models)
+RUN python training/train_model.py
 
 EXPOSE 8001
 
