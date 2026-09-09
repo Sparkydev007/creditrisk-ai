@@ -168,12 +168,12 @@ Customer registers → Creates credit application → Application submitted
 ### Frontend
 | Technology | Version | Purpose |
 |-----------|---------|---------|
-| React | 18.2 | UI framework |
-| Vite | 5.0 | Build tool |
-| Bootstrap | 5.3 | CSS framework |
-| Recharts | 2.10 | Data visualization |
-| React Router | 6.21 | Client-side routing |
-| Axios | 1.6 | HTTP client |
+| React | 19 | UI framework |
+| TypeScript | 5.8 | Type safety |
+| Vite | 6.0 | Build tool |
+| Tailwind CSS | 4.1 | Styling |
+| Axios | 1.7 | HTTP client |
+| Lucide / Material Symbols | - | Iconography |
 
 ### DevOps
 | Technology | Version | Purpose |
@@ -484,17 +484,21 @@ Risk score = 742
 
 ## Frontend
 
-### Pages
+Enterprise decisioning UI (React 19 + Tailwind v4) with a JWT login gate, a LIVE/DEMO data indicator, and automatic fallback to demo data when the backend is unreachable.
 
-| Route | Description |
+### Screens
+
+| Screen | Description |
 |-------|-------------|
-| `/login` | JWT authentication |
-| `/dashboard` | Application statistics, charts, system overview |
-| `/customers` | Customer list with search and pagination |
-| `/customers/:id` | Customer profile with financial data |
-| `/applications` | Credit application list |
-| `/applications/:id` | Full detail: loan, risk assessment, decision, audit trail |
-| `/audit` | System-wide audit log with filtering |
+| Login | JWT authentication (demo accounts work offline too) |
+| Dashboard | Portfolio KPIs, pipeline charts, quick actions |
+| Applications | List + full detail view with risk factors, rationale, timeline, decision override |
+| Review Queue | MANUAL_REVIEW applications with priority filtering |
+| Customers | Customer list with exposure and risk grades |
+| Risk Analytics | Portfolio stress-testing view |
+| Audit | Live audit trail from the audit service (mock data in demo mode) |
+| Policy Config | Decision policy thresholds |
+| System Health | Per-service health probes via the gateway |
 
 ### Live Demo
 
@@ -510,10 +514,21 @@ Risk score = 742
 
 ## Deployment
 
+### Level 0: Free cloud — $0/month (recommended)
+
+Full production-style deployment on an Oracle Cloud Always Free ARM VM (2 OCPU / 12 GB) — all services, Kafka, PostgreSQL, HTTPS.
+
+📘 **[Follow the Free Cloud Deployment Guide](docs/deployment/free-cloud-deployment.md)**
+
+CI/CD included: `.github/workflows/cd.yml` builds all 8 images to GHCR and can auto-deploy over SSH on every push to `main`.
+
 ### Level 1: Local (Docker Compose)
 
 ```bash
-docker compose up --build
+cp .env.example .env
+docker compose --profile app up --build          # app stack
+
+docker compose --profile app --profile monitoring up -d   # + Prometheus/Grafana
 ```
 
 ### Level 2: Cloud (AWS via Terraform)

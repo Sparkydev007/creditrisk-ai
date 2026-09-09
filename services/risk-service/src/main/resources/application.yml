@@ -5,7 +5,7 @@ spring:
   application:
     name: risk-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/creditrisk_risk
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/creditrisk_risk}
     username: ${DATABASE_USERNAME:creditrisk}
     password: ${DATABASE_PASSWORD:creditrisk_secret}
     hikari:

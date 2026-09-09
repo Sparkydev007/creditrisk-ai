@@ -1,4 +1,11 @@
-version: '3.8'
+# ------------------------------------------------------------------
+# CreditRisk AI - full stack
+#   docker compose --profile app up -d          # app stack only
+#   docker compose --profile app --profile monitoring up -d   # + Prometheus/Grafana
+#
+# Memory footprint (with JVM tuning below): ~5.5-6.5 GB total,
+# fits an Oracle Cloud Always Free ARM VM (2 OCPU / 12 GB).
+# ------------------------------------------------------------------
 
 services:
   # Infrastructure
@@ -6,7 +13,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: creditrisk
-      POSTGRES_PASSWORD: creditrisk_secret
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-creditrisk_secret}
       POSTGRES_DB: creditrisk
     ports:
       - "5432:5432"
@@ -18,6 +25,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Keep postgres on the host's native arch so DB performance isn't emulated
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -47,6 +55,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms256M"
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
       interval: 15s
@@ -75,13 +84,14 @@ services:
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/creditrisk
       DATABASE_USERNAME: creditrisk
-      DATABASE_PASSWORD: creditrisk_secret
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-creditrisk_secret}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       JWT_SECRET: ${JWT_SECRET:-default-secret-key-that-is-at-least-32-bytes}
       KAFKA_TOPIC_APPLICATION_EVENTS: application-events
       KAFKA_TOPIC_RISK_EVENTS: risk-events
       KAFKA_TOPIC_DECISION_EVENTS: decision-events
       KAFKA_TOPIC_AUDIT_EVENTS: audit-events
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms256m -Xmx512m -XX:+UseSerialGC -XX:MaxRAMPercentage=75.0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,13 +107,15 @@ services:
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/creditrisk_app
       DATABASE_USERNAME: creditrisk
-      DATABASE_PASSWORD: creditrisk_secret
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-creditrisk_secret}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       JWT_SECRET: ${JWT_SECRET:-default-secret-key-that-is-at-least-32-bytes}
+      CUSTOMER_SERVICE_URL: http://customer-service:8081
       KAFKA_TOPIC_APPLICATION_EVENTS: application-events
       KAFKA_TOPIC_RISK_EVENTS: risk-events
       KAFKA_TOPIC_DECISION_EVENTS: decision-events
       KAFKA_TOPIC_AUDIT_EVENTS: audit-events
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms256m -Xmx512m -XX:+UseSerialGC -XX:MaxRAMPercentage=75.0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,13 +131,14 @@ services:
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/creditrisk_risk
       DATABASE_USERNAME: creditrisk
-      DATABASE_PASSWORD: creditrisk_secret
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-creditrisk_secret}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       ML_SERVICE_URL: http://ml-service:8001
       KAFKA_TOPIC_APPLICATION_EVENTS: application-events
       KAFKA_TOPIC_RISK_EVENTS: risk-events
       KAFKA_TOPIC_DECISION_EVENTS: decision-events
       KAFKA_TOPIC_AUDIT_EVENTS: audit-events
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms256m -Xmx512m -XX:+UseSerialGC -XX:MaxRAMPercentage=75.0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -143,12 +156,14 @@ services:
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/creditrisk_decision
       DATABASE_USERNAME: creditrisk
-      DATABASE_PASSWORD: creditrisk_secret
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-creditrisk_secret}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APPLICATION_SERVICE_URL: http://application-service:8082
       KAFKA_TOPIC_APPLICATION_EVENTS: application-events
       KAFKA_TOPIC_RISK_EVENTS: risk-events
       KAFKA_TOPIC_DECISION_EVENTS: decision-events
       KAFKA_TOPIC_AUDIT_EVENTS: audit-events
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms256m -Xmx512m -XX:+UseSerialGC -XX:MaxRAMPercentage=75.0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,12 +179,13 @@ services:
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/creditrisk_audit
       DATABASE_USERNAME: creditrisk
-      DATABASE_PASSWORD: creditrisk_secret
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-creditrisk_secret}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_TOPIC_APPLICATION_EVENTS: application-events
       KAFKA_TOPIC_RISK_EVENTS: risk-events
       KAFKA_TOPIC_DECISION_EVENTS: decision-events
       KAFKA_TOPIC_AUDIT_EVENTS: audit-events
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms256m -Xmx512m -XX:+UseSerialGC -XX:MaxRAMPercentage=75.0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -182,15 +198,24 @@ services:
       dockerfile: services/api-gateway/Dockerfile
     ports:
       - "8080:8080"
+    environment:
+      CUSTOMER_SERVICE_URL: http://customer-service:8081
+      APPLICATION_SERVICE_URL: http://application-service:8082
+      RISK_SERVICE_URL: http://risk-service:8083
+      DECISION_SERVICE_URL: http://decision-service:8084
+      AUDIT_SERVICE_URL: http://audit-service:8085
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms256m -Xmx512m -XX:+UseSerialGC -XX:MaxRAMPercentage=75.0}
     depends_on:
       customer-service:
         condition: service_started
       application-service:
         condition: service_started
 
-  # Observability
+  # Observability (optional profile - disable to save ~400MB on a small VM)
   prometheus:
     image: prom/prometheus:v2.48.0
+    profiles: ["monitoring"]
     ports:
       - "9090:9090"
     volumes:
@@ -201,6 +226,7 @@ services:
 
   grafana:
     image: grafana/grafana:10.2.2
+    profiles: ["monitoring"]
     ports:
       - "3001:3000"
     environment:

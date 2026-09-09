@@ -8,7 +8,7 @@ spring:
     gateway:
       routes:
         - id: customer-service
-          uri: http://localhost:8081
+          uri: ${CUSTOMER_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/customers/**,/api/auth/**
           filters:
@@ -19,7 +19,7 @@ spring:
                 fallbackUri: forward:/fallback/customer-service
 
         - id: application-service
-          uri: http://localhost:8082
+          uri: ${APPLICATION_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/applications/**
           filters:
@@ -30,21 +30,21 @@ spring:
                 fallbackUri: forward:/fallback/application-service
 
         - id: risk-service
-          uri: http://localhost:8083
+          uri: ${RISK_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/risk/**
           filters:
             - StripPrefix=0
 
         - id: decision-service
-          uri: http://localhost:8084
+          uri: ${DECISION_SERVICE_URL:http://localhost:8084}
           predicates:
             - Path=/api/decisions/**
           filters:
             - StripPrefix=0
 
         - id: audit-service
-          uri: http://localhost:8085
+          uri: ${AUDIT_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/audit/**
           filters:
@@ -53,8 +53,8 @@ spring:
       globalcors:
         corsConfigurations:
           '[/**]':
-            allowedOrigins:
-              - "http://localhost:3000"
+            allowedOriginPatterns:
+              - "${CORS_ORIGINS:http://localhost:3000,http://localhost:3001}"
             allowedMethods:
               - GET
               - POST

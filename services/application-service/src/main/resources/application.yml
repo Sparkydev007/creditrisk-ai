@@ -5,7 +5,7 @@ spring:
   application:
     name: application-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/creditrisk_app
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/creditrisk_app}
     username: ${DATABASE_USERNAME:creditrisk}
     password: ${DATABASE_PASSWORD:creditrisk_secret}
     hikari:
@@ -31,6 +31,10 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET:default-secret-key-that-is-at-least-32-bytes}
+
+app:
+  services:
+    customer-service-url: ${CUSTOMER_SERVICE_URL:http://localhost:8081}
 
 springdoc:
   api-docs:

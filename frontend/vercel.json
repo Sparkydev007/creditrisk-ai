@@ -3,6 +3,8 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://REPLACE-WITH-YOUR-API-HOST/api/$1" },
+    { "source": "/actuator/(.*)", "destination": "https://REPLACE-WITH-YOUR-API-HOST/actuator/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

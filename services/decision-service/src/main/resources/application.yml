@@ -5,7 +5,7 @@ spring:
   application:
     name: decision-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/creditrisk_decision
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/creditrisk_decision}
     username: ${DATABASE_USERNAME:creditrisk}
     password: ${DATABASE_PASSWORD:creditrisk_secret}
     hikari:
@@ -31,6 +31,10 @@ spring:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+app:
+  services:
+    application-service-url: ${APPLICATION_SERVICE_URL:http://localhost:8082}
 
 management:
   endpoints:
