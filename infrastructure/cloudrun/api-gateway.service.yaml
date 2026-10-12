@@ -1,0 +1,47 @@
+apiVersion: serving.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: api-gateway
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "2"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 120
+      serviceAccountName: creditrisk-run@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+      - image: REGION-docker.pkg.dev/PROJECT_ID/REPO/api-gateway:latest
+        ports:
+          - containerPort: 8080
+        env:
+        - name: CUSTOMER_SERVICE_URL
+          value: http://customer-service.REGION.run.app
+        - name: APPLICATION_SERVICE_URL
+          value: http://application-service.REGION.run.app
+        - name: RISK_SERVICE_URL
+          value: http://risk-service.REGION.run.app
+        - name: DECISION_SERVICE_URL
+          value: http://decision-service.REGION.run.app
+        - name: AUDIT_SERVICE_URL
+          value: http://audit-service.REGION.run.app
+        - name: CORS_ORIGINS
+          value: "*"
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:MaxRAMPercentage=75.0"
+        resources:
+          limits:
+            cpu: "1"
+            memory: 512Mi
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          failureThreshold: 30
+          periodSeconds: 5
+          timeoutSeconds: 3

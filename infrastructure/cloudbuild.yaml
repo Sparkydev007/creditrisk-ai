@@ -1,0 +1,106 @@
+# ------------------------------------------------------------------
+# CreditRisk AI — Google Cloud Build pipeline
+#
+# Builds all 8 images and pushes them to Artifact Registry,
+# then deploys anything passed via _SERVICES_TO_DEPLOY to Cloud Run.
+#
+# Trigger on push to main:
+#   gcloud beta builds triggers create github \\
+#     --name="creditrisk-cd" \\
+#     --repo-owner=prathmesh-bunde --repo-name=creditrisk-ai \\
+#     --branch-pattern='^main$' \\
+#     --build-config=infrastructure/cloudbuild.yaml
+#
+# Required substitution vars (set on the trigger):
+#   _REGION           e.g. europe-west1
+#   _REPO             Artifact Registry repo name (e.g. creditrisk)
+#   _SERVICES         comma-separated list of Dockerfile suffix dirs
+# ------------------------------------------------------------------
+
+options:
+  machineType: E2_HIGHCPU_8
+  dynamicSubstitutions: true
+
+substitutions:
+  _REGION: europe-west1
+  _REPO: creditrisk
+  _SERVICES_TO_DEPLOY: ''
+
+steps:
+  # 0. Auth for docker push (uses Cloud Build's default SA lineage)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: docker-auth
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        gcloud auth configure-docker ${_REGION}-docker.pkg.dev --quiet
+
+  # 1. Build & push every image (parallel-friendly: identical steps, cache shared)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: build-push-images
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        set -e
+        REG="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}"
+        gcloud auth configure-docker ${_REGION}-docker.pkg.dev --quiet || true
+
+        # Java services (root context, per-service Dockerfile)
+        for svc in api-gateway customer-service application-service risk-service decision-service audit-service; do
+          docker build -t "$REG/$svc:$SHORT_SHA" -t "$REG/$svc:latest" -f services/$svc/Dockerfile . &
+        done
+
+        # Python ML service
+        docker build -t "$REG/ml-service:$SHORT_SHA" -t "$REG/ml-service:latest" ml-service &
+
+        # Frontend (Cloud Run variant: nginx proxies to the api-gateway Cloud Run URL)
+        docker build -t "$REG/frontend:$SHORT_SHA" -t "$REG/frontend:latest" -f frontend/Dockerfile.cloudrun frontend &
+
+        wait
+        for img in $REG/*:$SHORT_SHA; do docker push "$img"; done
+        for img in $REG/*:latest; do docker push "$img"; done
+
+  # 3. Deploy all services to Cloud Run using the per-service YAML manifests
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-cloud-run
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        set -e
+        REG="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}"
+
+        # Substitute $GATEWAY_URL (known after gateway deploy) into frontend manifest
+        GATEWAY_URL=$(gcloud run services describe api-gateway --region ${_REGION} --format 'value(status.url)')
+        sed "s|GATEWAY_URL_PLACEHOLDER|$GATEWAY_URL|" infrastructure/cloudrun/frontend.service.yaml > /tmp/frontend.yaml
+
+        for svc in api-gateway customer-service application-service risk-service decision-service audit-service ml-service frontend; do
+          # Point manifest image at the freshly pushed digest-tagged build
+          sed -E "s|image: .*|image: $REG/$svc:$SHORT_SHA|" infrastructure/cloudrun/$svc.service.yaml > /tmp/$svc.yaml
+          gcloud run services replace /tmp/$svc.yaml --region ${_REGION} --quiet
+        done
+
+  # 4. Allow unauthenticated traffic where expected (skip unconsumed)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: allow-public
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        gcloud run services set-iam-policy frontend --region ${_REGION} --quiet \\
+          || gcloud run services add-iam-policy-binding frontend --region ${_REGION} \\
+             --member=allUsers --role=roles/run.invoker --quiet
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api-gateway:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/customer-service:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/application-service:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/risk-service:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/decision-service:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/audit-service:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ml-service:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/frontend:$SHORT_SHA'
+
+timeout: 1800s

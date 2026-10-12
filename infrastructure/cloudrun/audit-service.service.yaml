@@ -1,0 +1,51 @@
+apiVersion: serving.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: audit-service
+  annotations:
+    run.googleapis.com/ingress: internal
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "2"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 120
+      serviceAccountName: creditrisk-run@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+      - image: REGION-docker.pkg.dev/PROJECT_ID/REPO/audit-service:latest
+        ports:
+          - containerPort: 8085
+        env:
+        - name: DATABASE_URL
+          value: jdbc:postgresql:///<DB_NAME>?socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlInstance=PROJECT_ID:REGION:creditrisk
+        - name: DATABASE_USERNAME
+          value: creditrisk
+        - name: DATABASE_PASSWORD
+          value: from-secret:creditrisk-db-password
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: from-secret:creditrisk-kafka-servers
+        - name: KAFKA_TOPIC_APPLICATION_EVENTS
+          value: application-events
+        - name: KAFKA_TOPIC_RISK_EVENTS
+          value: risk-events
+        - name: KAFKA_TOPIC_DECISION_EVENTS
+          value: decision-events
+        - name: KAFKA_TOPIC_AUDIT_EVENTS
+          value: audit-events
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:MaxRAMPercentage=75.0"
+        resources:
+          limits:
+            cpu: "1"
+            memory: 512Mi
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8085
+          failureThreshold: 30
+          periodSeconds: 5
+          timeoutSeconds: 3

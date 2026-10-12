@@ -1,0 +1,25 @@
+# Cloud Run variant of the frontend image.
+# Difference from frontend/Dockerfile: nginx listens on $PORT (Cloud Run injects
+# PORT, defaulting to 8080) and proxies /api/* to the Cloud Run gateway URL
+# baked in at build time via the GATEWAY_UPSTREAM build arg (Cloud Run service
+# URLs are stable, so baking it in is safe).
+#
+# Build:
+#   docker build -f frontend/Dockerfile.cloudrun \
+#     --build-arg GATEWAY_UPSTREAM=https://api-gateway.<region>.run.app \
+#     -t frontend:cloudrun .
+
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund --legacy-peer-deps
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+ARG GATEWAY_UPSTREAM=http://api-gateway:8080
+ENV GATEWAY_UPSTREAM=${GATEWAY_UPSTREAM} PORT=8080
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.cloudrun.conf /etc/nginx/templates/default.conf.template
+EXPOSE 8080
+CMD ["nginx", "-g", "daemon off;"]

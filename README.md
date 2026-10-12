@@ -13,6 +13,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Kafka](https://img.shields.io/badge/Apache_Kafka-7.5-231F20?style=for-the-badge&logo=apachekafka&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-24-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![GCP](https://img.shields.io/badge/GCP-Cloud_Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-1.6-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)
 
 [![CI](https://github.com/prathmesh-bunde/creditrisk-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/prathmesh-bunde/creditrisk-ai/actions/workflows/ci.yml)
@@ -71,7 +72,7 @@ Customer registers → Creates credit application → Application submitted
 | **Database** | PostgreSQL with Flyway migrations and proper indexing |
 | **Frontend** | React 18 with Bootstrap 5, Recharts, Vite |
 | **CI/CD** | GitHub Actions with build, test, and Docker pipeline |
-| **Infrastructure** | Terraform for AWS (VPC, RDS, ECS, ALB) |
+| **Infrastructure** | Terraform for GCP (Cloud Run, Cloud SQL) and AWS (VPC, RDS, ECS, ALB) |
 | **Observability** | Prometheus, Grafana, Spring Actuator, structured logging |
 
 > ⚠️ **Disclaimer:** This is an educational simulation system. It is **NOT** suitable for real-world credit underwriting without extensive validation, governance, compliance, and human oversight.
@@ -181,7 +182,8 @@ Customer registers → Creates credit application → Application submitted
 | Docker | 24.x | Containerization |
 | Docker Compose | 3.8 | Local orchestration |
 | GitHub Actions | - | CI/CD pipeline |
-| Terraform | 1.6 | Infrastructure as Code |
+| Google Cloud Run | - | GCP deployment target |
+| Terraform | 1.6 | Infrastructure as Code (GCP + AWS) |
 | Prometheus | 2.48 | Metrics collection |
 | Grafana | 10.2 | Metrics visualization |
 
@@ -531,7 +533,27 @@ docker compose --profile app up --build          # app stack
 docker compose --profile app --profile monitoring up -d   # + Prometheus/Grafana
 ```
 
-### Level 2: Cloud (AWS via Terraform)
+### Level 2: Cloud (GCP — Cloud Run, recommended)
+
+Full GCP deployment: all 8 services on **Cloud Run**, PostgreSQL on **Cloud SQL**, images in **Artifact Registry**, secrets in **Secret Manager**, IaC in `infrastructure/terraform-gcp`, CI/CD in `.github/workflows/deploy-gcp.yml` (Workload Identity Federation, no long-lived keys).
+
+📘 **[Follow the GCP Cloud Run Deployment Guide](docs/deployment/gcp-deployment.md)**
+
+```bash
+cd infrastructure/terraform-gcp
+terraform apply -var project_id=YOUR_PROJECT -var db_password=... -var jwt_secret=...
+# then push to main — deploy-gcp.yml builds and deploys all services to Cloud Run
+```
+
+```
+Cloud Run (8 services, scale-to-zero capable)
+  ↓
+Cloud SQL PostgreSQL (5 databases, PITR backups)
+  ↓
+Artifact Registry + Secret Manager + Cloud Logging
+```
+
+### Level 3: Cloud (AWS via Terraform)
 
 ```bash
 cd infrastructure/terraform
@@ -549,7 +571,7 @@ CloudFront / S3  →  ALB  →  ECS Fargate (6 services)
                          CloudWatch Logs
 ```
 
-### Level 3: Frontend (Vercel)
+### Level 4: Frontend (Vercel)
 
 ```bash
 cd frontend

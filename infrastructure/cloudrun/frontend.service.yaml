@@ -1,0 +1,37 @@
+apiVersion: serving.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: frontend
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "4"
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      containerConcurrency: 120
+      timeoutSeconds: 60
+      serviceAccountName: creditrisk-run@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+      - image: REGION-docker.pkg.dev/PROJECT_ID/REPO/frontend:latest
+        ports:
+          - containerPort: 3000
+        env:
+        # nginx proxies /api/* to the gateway upstream; the URL is fixed at
+        # startup by the Cloud Run gateway service (immutable URL) via boot
+        # script in Dockerfile.cloudrun. Override here if you mapped a domain.
+        - name: GATEWAY_UPSTREAM
+          value: http://api-gateway.REGION.run.app
+        resources:
+          limits:
+            cpu: "1"
+            memory: 256Mi
+        startupProbe:
+          httpGet:
+            path: /
+            port: 3000
+          failureThreshold: 10
+          periodSeconds: 5
+          timeoutSeconds: 3

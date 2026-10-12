@@ -1,0 +1,39 @@
+apiVersion: serving.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: ml-service
+  annotations:
+    run.googleapis.com/ingress: internal
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "2"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 40
+      timeoutSeconds: 120
+      serviceAccountName: creditrisk-run@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+      - image: REGION-docker.pkg.dev/PROJECT_ID/REPO/ml-service:latest
+        ports:
+          - containerPort: 8001
+        resources:
+          limits:
+            cpu: "1"
+            memory: 768Mi
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          failureThreshold: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3

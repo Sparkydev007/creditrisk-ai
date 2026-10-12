@@ -1,0 +1,133 @@
+name: Deploy to GCP (Cloud Run)
+
+# Builds all 8 images to Artifact Registry, then deploys every service to
+# Cloud Run. Uses Workload Identity Federation — no long-lived service-account
+# keys stored as GitHub secrets.
+#
+# Required repo VARIABLES (Settings → Secrets and variables → Actions → Variables):
+#   GCP_PROJECT_ID    e.g. my-creditrisk-project
+#   GCP_REGION        e.g. europe-west1
+#
+# Required repo SECRET:
+#   WIF_PROVIDER      projects/<num>/locations/global/workloadIdentityPools/<pool>/providers/<provider>
+#   WIF_SA_EMAIL      the deployer service account email
+#
+# Prerequisites (one-time, see docs/deployment/gcp-deployment.md):
+#   1. terraform apply on infrastructure/terraform-gcp (Cloud SQL, secrets, IAM)
+#   2. Secrets in Secret Manager: creditrisk-db-password, creditrisk-jwt-secret
+#   3. Kafka: a Kafka broker reachable from Cloud Run (Confluent Cloud, or skip
+#      with permissive error handling per the guide)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  REPO: creditrisk
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # ---------- Auth (Workload Identity Federation) ----------
+      - id: wif
+        name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SA_EMAIL }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Enable required APIs (no-op if already enabled)
+        run: |
+          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com --quiet
+
+      # ---------- Build + push images ----------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push all 8 images
+        run: |
+          REG="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}"
+          SHORTH_SHA="${GITHUB_SHA::7}"
+
+          # Java services share the root/backend context so the parent POM
+          # and services/common resolve; Docker layer caching makes these fast.
+          for svc in api-gateway customer-service application-service risk-service decision-service audit-service; do
+            docker build -t "$REG/$svc:$SHORTH_SHA" -t "$REG/$svc:latest" \
+              -f "services/$svc/Dockerfile" . &
+          done
+          docker build -t "$REG/ml-service:$SHORTH_SHA" -t "$REG/ml-service:latest" ml-service &
+          docker build -f frontend/Dockerfile.cloudrun \
+            --build-arg GATEWAY_UPSTREAM="http://api-gateway.${REGION}.run.app" \
+            -t "$REG/frontend:$SHORTH_SHA" -t "$REG/frontend:latest" frontend &
+          wait
+
+          for svc in api-gateway customer-service application-service risk-service decision-service audit-service ml-service frontend; do
+            docker push "$REG/$svc:$SHORTH_SHA" &
+            docker push "$REG/$svc:latest" &
+          done
+          wait
+
+      # ---------- Deploy to Cloud Run ----------
+      - name: Render service manifests
+        run: |
+          ./scripts/render-gcp-manifests.sh "$PROJECT_ID" "$REGION" "$REPO"
+
+      - name: Substitute Cloud SQL connection name
+        run: |
+          # Database URLs use the Cloud SQL connector: the manifest has a
+          # PROJECT_ID:REGION:creditrisk placeholder that must be the real
+          # connectionName for the Cloud SQL socket factory to work.
+          CONN_NAME=$(gcloud sql instances describe creditrisk --format 'value(connectionName)')
+          for svc in customer-service application-service risk-service decision-service audit-service; do
+            sed -i "s|PROJECT_ID:REGION:creditrisk|${CONN_NAME}|g" "/tmp/creditrisk-gcp/$svc.service.yaml"
+          done
+
+      - name: Deploy all services to Cloud Run
+        run: |
+          # Order matters: gateway + backend first, then frontend (needs GATEWAY_URL)
+          for svc in api-gateway customer-service application-service risk-service decision-service audit-service ml-service; do
+            gcloud run services replace "/tmp/creditrisk-gcp/$svc.service.yaml" --region "$REGION" --quiet
+          done
+
+          # The frontend image receives the gateway URL via the
+          # GATEWAY_UPSTREAM env var (baked at build time); if the gateway URL
+          # changed (e.g. region change), update it here by rebuilding the
+          # image with --build-arg GATEWAY_UPSTREAM=$GATEWAY_URL.
+          gcloud run services replace /tmp/creditrisk-gcp/frontend.service.yaml --region "$REGION" --quiet
+
+      # ---------- Public access on the frontend ----------
+      - name: Allow unauthenticated access to frontend
+        run: gcloud run services add-iam-policy-binding frontend \
+             --region "$REGION" \
+             --member=allUsers --role=roles/run.invoker --quiet
+
+      - name: Output URLs
+        run: |
+          echo "Frontend:   $(gcloud run services describe frontend --region "$REGION" --format 'value(status.url)')"
+          echo "API Gateway: $(gcloud run services describe api-gateway --region "$REGION" --format 'value(status.url)')"
+
+  build-only:
+    # Light validation for PRs — build only frontend + one java service
+    # so config/manifest typos are caught without deploying.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate manifests render
+        run: ./scripts/render-gcp-manifests.sh test-project test-region test-repo
