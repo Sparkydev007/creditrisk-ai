@@ -524,6 +524,10 @@ Full production-style deployment on an Oracle Cloud Always Free ARM VM (2 OCPU /
 
 CI/CD included: `.github/workflows/cd.yml` builds all 8 images to GHCR and can auto-deploy over SSH on every push to `main`.
 
+### Level 0b: GCP Always Free VM (VM + Docker Compose)
+
+Automated one-script deployment to a GCP Always Free VM (e2-micro + Cloud SQL): 📜 [`gcp-deploy.sh`](gcp-deploy.sh) · 📋 [`Setup Checklist`](docs/deployment/gcp-setup-checklist.md) · 📘 [`Guide`](docs/deployment/gcp-always-free-deployment.md)
+
 ### Level 1: Local (Docker Compose)
 
 ```bash
